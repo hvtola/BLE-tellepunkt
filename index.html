@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Kartvisning (htla@nve.no)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { position: fixed; inset: 0; }
+
+    /* Left panel: loader + status + datasets list */
+    #panel {
+      position: absolute; left: 10px; top: 10px; z-index: 1000;
+      background: #fff; padding: 10px 12px; border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.25); font: 13px system-ui, Arial;
+      max-width: 380px; min-width: 260px;
+    }
+    #panel input[type="file"] { font: inherit; }
+    #status { margin-top: 6px; color: #444; }
+    #list { margin-top: 8px; max-height: 240px; overflow: auto; border-top: 1px solid #eee; padding-top: 6px; }
+    .item { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+    .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn { border: 1px solid #ccc; padding: 2px 6px; border-radius: 4px; background: #f8f8f8; cursor: pointer; }
+    .btn:hover { background: #f1f1f1; }
+
+    /* Right panel: overlay opacity */
+    .ctl {
+      position: absolute; right: 12px; top: 12px; z-index: 1000;
+      background: #fff; padding: 8px 10px; border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.2); font: 14px system-ui, Arial;
+    }
+    .ctl label { margin-right: 8px; }
+    code { background: #f5f5f5; padding: 0 3px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Left: load multiple local GeoJSONs -->
+  <div id="panel">
+    <div><b>GeoJSON layers</b></div>
+    <input id="files" type="file" accept=".geojson,.json" multiple />
+    <div id="status">Lokasjoner are already loaded (hardcoded). Optionally add more local GeoJSON files; each dataset gets its own color (50% fill).</div>
+    <div id="list"></div>
+  </div>
+
+  <script>
+    // 1) Map (Canvas helps with large vectors)
+    const map = L.map('map', { preferCanvas: true }).setView([69.66, 19], 9);
+
+    // Hardcoded locations (from lokasjoner.geoJSON.geojson)
+    const lokasjonerGeojson = {"type": "FeatureCollection", "features": [{"type": "Feature", "id": 403, "geometry": {"type": "Point", "coordinates": [19.770029012110086, 69.19135745031004]}, "properties": {"OBJECTID": 403, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Sørfjelltinden alt 2 ", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 404, "geometry": {"type": "Point", "coordinates": [19.46227151802331, 69.28735366843746]}, "properties": {"OBJECTID": 404, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Storvasstinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 405, "geometry": {"type": "Point", "coordinates": [20.198527148435105, 69.88714093185637]}, "properties": {"OBJECTID": 405, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Storgalten 2", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 406, "geometry": {"type": "Point", "coordinates": [20.261590560983628, 69.961204488105]}, "properties": {"OBJECTID": 406, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Russelvjellet nord 2", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 407, "geometry": {"type": "Point", "coordinates": [20.56590367235808, 69.79336283164018]}, "properties": {"OBJECTID": 407, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Kjelvågtinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 408, "geometry": {"type": "Point", "coordinates": [20.72884587670876, 69.74801371248256]}, "properties": {"OBJECTID": 408, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Svartfjellet", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 409, "geometry": {"type": "Point", "coordinates": [20.5377805234463, 69.72442172468386]}, "properties": {"OBJECTID": 409, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Sorbmegáisa 1 ", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 410, "geometry": {"type": "Point", "coordinates": [20.546203681801284, 69.7200386483999]}, "properties": {"OBJECTID": 410, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Sorbmegáisa 2", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 411, "geometry": {"type": "Point", "coordinates": [20.5944765417626, 69.60535673306235]}, "properties": {"OBJECTID": 411, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Skavlevárri", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 803, "geometry": {"type": "Point", "coordinates": [19.7287371737615, 69.40357767445032]}, "properties": {"OBJECTID": 803, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Lakselvtindane", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 804, "geometry": {"type": "Point", "coordinates": [19.60636260719843, 69.22459949629238]}, "properties": {"OBJECTID": 804, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Perstinden + Rássevárri", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 805, "geometry": {"type": "Point", "coordinates": [19.512434528366093, 69.2996385894769]}, "properties": {"OBJECTID": 805, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Middagstinden 1", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 806, "geometry": {"type": "Point", "coordinates": [20.245978501768313, 69.60451046627438]}, "properties": {"OBJECTID": 806, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Fastdaltinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 807, "geometry": {"type": "Point", "coordinates": [20.548448496283406, 69.74111924548905]}, "properties": {"OBJECTID": 807, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Storhaugen ", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 808, "geometry": {"type": "Point", "coordinates": [20.524523564071522, 69.61532631211645]}, "properties": {"OBJECTID": 808, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Nordmannviktinden + Gillávarri", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 809, "geometry": {"type": "Point", "coordinates": [19.429386600462124, 69.37739882793068]}, "properties": {"OBJECTID": 809, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Tomasjordtinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1202, "geometry": {"type": "Point", "coordinates": [19.79188760660421, 69.19698420920065]}, "properties": {"OBJECTID": 1202, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Sørfjelltinden alt 1", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1203, "geometry": {"type": "Point", "coordinates": [20.079441084369616, 69.4542440718714]}, "properties": {"OBJECTID": 1203, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Daltinden alt 1", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1204, "geometry": {"type": "Point", "coordinates": [19.991584909374957, 69.60530366052605]}, "properties": {"OBJECTID": 1204, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Tverrelvdalstinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1205, "geometry": {"type": "Point", "coordinates": [19.92675702061584, 69.61739880285513]}, "properties": {"OBJECTID": 1205, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Sofiatinden + Sultinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1206, "geometry": {"type": "Point", "coordinates": [20.06638772266344, 69.82143714467679]}, "properties": {"OBJECTID": 1206, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Stetinden + Rundfjellet", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1207, "geometry": {"type": "Point", "coordinates": [19.40186634190611, 69.34319079260703]}, "properties": {"OBJECTID": 1207, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Litletinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1208, "geometry": {"type": "Point", "coordinates": [19.737870921353014, 69.52321648066432]}, "properties": {"OBJECTID": 1208, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Fugldalsfjellet", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1602, "geometry": {"type": "Point", "coordinates": [19.531161954298035, 69.30308176740107]}, "properties": {"OBJECTID": 1602, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Middagstinden 2 ", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1603, "geometry": {"type": "Point", "coordinates": [19.723067514437847, 69.47183096944545]}, "properties": {"OBJECTID": 1603, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Holmbukttinden + Jiehkkevárri", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1604, "geometry": {"type": "Point", "coordinates": [20.066784855609562, 69.45820041542379]}, "properties": {"OBJECTID": 1604, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Daltinden alt 2", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1605, "geometry": {"type": "Point", "coordinates": [20.171334538926907, 69.51515540565397]}, "properties": {"OBJECTID": 1605, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Rundfjellet", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1606, "geometry": {"type": "Point", "coordinates": [20.17872270166118, 69.56539277511929]}, "properties": {"OBJECTID": 1606, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Rørnestinden 1", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1607, "geometry": {"type": "Point", "coordinates": [19.963837506538756, 69.71630834208521]}, "properties": {"OBJECTID": 1607, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Store Jægervasstinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1608, "geometry": {"type": "Point", "coordinates": [20.015417629182142, 69.77226748363918]}, "properties": {"OBJECTID": 1608, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Steinfjellet 1", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1609, "geometry": {"type": "Point", "coordinates": [20.53812349823395, 69.84148677359153]}, "properties": {"OBJECTID": 1609, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Blåtinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 1610, "geometry": {"type": "Point", "coordinates": [20.104120115050755, 69.59229485121595]}, "properties": {"OBJECTID": 1610, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Store Kjostinden/massivet", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2002, "geometry": {"type": "Point", "coordinates": [19.61222084103476, 69.34624076361045]}, "properties": {"OBJECTID": 2002, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Vardtinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2003, "geometry": {"type": "Point", "coordinates": [19.683584105860472, 69.35572532725516]}, "properties": {"OBJECTID": 2003, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Langdalstindane", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2004, "geometry": {"type": "Point", "coordinates": [19.652749317605714, 69.3803193956348]}, "properties": {"OBJECTID": 2004, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Ellendalstinden og andre", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2005, "geometry": {"type": "Point", "coordinates": [19.735857925481604, 69.44818680071123]}, "properties": {"OBJECTID": 2005, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Bálggesvárri", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2006, "geometry": {"type": "Point", "coordinates": [20.243853265182242, 69.6774345414601]}, "properties": {"OBJECTID": 2006, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Taffeltind", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2007, "geometry": {"type": "Point", "coordinates": [20.18514754705127, 69.90283350430857]}, "properties": {"OBJECTID": 2007, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Storgalten 1", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2008, "geometry": {"type": "Point", "coordinates": [20.217334187467046, 69.9436492151212]}, "properties": {"OBJECTID": 2008, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Russelvfjellet sør ", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2009, "geometry": {"type": "Point", "coordinates": [20.257320871132702, 69.95933879067609]}, "properties": {"OBJECTID": 2009, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Russelvfjellet Nord alt 1 ", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2010, "geometry": {"type": "Point", "coordinates": [20.665004763883328, 69.85873413114093]}, "properties": {"OBJECTID": 2010, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Blåtinden alt 2 ", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2011, "geometry": {"type": "Point", "coordinates": [20.526200454952267, 69.67905014694364]}, "properties": {"OBJECTID": 2011, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Stáluvárri", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2012, "geometry": {"type": "Point", "coordinates": [20.689920503822325, 69.5280969249789]}, "properties": {"OBJECTID": 2012, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Nommedalstinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2402, "geometry": {"type": "Point", "coordinates": [20.177413789932164, 69.56048199676476]}, "properties": {"OBJECTID": 2402, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Kavringtinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2403, "geometry": {"type": "Point", "coordinates": [20.14404177127769, 69.57654516022525]}, "properties": {"OBJECTID": 2403, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Rørnestinden 2", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2404, "geometry": {"type": "Point", "coordinates": [20.217695894662523, 69.58746334584197]}, "properties": {"OBJECTID": 2404, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Rundtinden", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2405, "geometry": {"type": "Point", "coordinates": [20.01614557838243, 69.76623252411532]}, "properties": {"OBJECTID": 2405, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Steinfjellet 2", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2406, "geometry": {"type": "Point", "coordinates": [20.03438875996257, 69.81275446077649]}, "properties": {"OBJECTID": 2406, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Eriksaksla - Veidalsfjellet", "hoyde_moh": null, "navn": null, "observatortur": "J"}}, {"type": "Feature", "id": 2407, "geometry": {"type": "Point", "coordinates": [20.16573613898176, 69.88146032000624]}, "properties": {"OBJECTID": 2407, "objekttype": "Annet", "ruteID": 2000, "klassifisertSign": "admin", "beskrivelse": "Rundfjellnasen", "hoyde_moh": null, "navn": null, "observatortur": "J"}}]};
+
+    // 2) Basemap: Kartverket WMTS (XYZ)
+    L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
+      attribution: '© Kartverket'
+    }).addTo(map);
+
+    // 3) Overlay: NVE Bratthet 2024 (XYZ tiles) with default 50% opacity
+    const bratthet = L.tileLayer(
+      'https://gis3.nve.no/arcgis/rest/services/wmts/Bratthet_2024/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: '© NVE',
+        opacity: 0.5,     // start at 50%
+        minZoom: 5,       // cache range from service
+        maxZoom: 16,
+        tileSize: 256
+      }
+    ).addTo(map);
+
+    // 4) Opacity control (25 / 50 / 75 %)
+    const ctl = L.control({ position: 'topright' });
+    ctl.onAdd = function () {
+      const div = L.DomUtil.create('div', 'ctl');
+      div.innerHTML = `
+        <div><b>NVE Bratthet 2024</b></div>
+        <label><input type="radio" name="opc" value="0.25"> 25%</label>
+        <label><input type="radio" name="opc" value="0.5" checked> 50%</label>
+        <label><input type="radio" name="opc" value="0.75"> 75%</label>
+      `;
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    };
+    ctl.addTo(map);
+    document.querySelectorAll('input[name="opc"]').forEach(r => {
+      r.addEventListener('change', e => bratthet.setOpacity(parseFloat(e.target.value)));
+    });
+
+    // ---------- Multi-GeoJSON loader ----------
+    const filesInput = document.getElementById('files');
+    const statusEl = document.getElementById('status');
+    const listEl = document.getElementById('list');
+
+    // Store datasets so you can toggle/remove
+    const datasets = [];
+    function setStatus(html) { statusEl.innerHTML = html; }
+
+    // Color generator: distinct hues in HSL space
+    function colorForIndex(i) {
+      const hue = (i * 47) % 360;    // 47 gives decent separation
+      return `hsl(${hue} 85% 50%)`;  // bright colors
+    }
+
+    function bboxAndCrsGuess(geojson) {
+      let minX= Infinity, minY= Infinity, maxX= -Infinity, maxY= -Infinity, count=0;
+      function scanCoords(coords) {
+        if (typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+          const x = coords[0], y = coords[1];
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            if (x<minX) minX=x; if (x>maxX) maxX=x;
+            if (y<minY) minY=y; if (y>maxY) maxY=y;
+            count++;
+          }
+        } else { for (const c of coords) scanCoords(c); }
+      }
+      function scanGeom(g) {
+        if (!g) return;
+        const t = g.type;
+        if (t === 'Point') scanCoords(g.coordinates);
+        else if (t === 'MultiPoint' || t === 'LineString') scanCoords(g.coordinates);
+        else if (t === 'MultiLineString' || t === 'Polygon') scanCoords(g.coordinates);
+        else if (t === 'MultiPolygon') scanCoords(g.coordinates);
+        else if (t === 'GeometryCollection') (g.geometries||[]).forEach(scanGeom);
+      }
+      if (geojson.type === 'FeatureCollection') (geojson.features||[]).forEach(f => scanGeom(f.geometry));
+      else if (geojson.type === 'Feature') scanGeom(geojson.geometry);
+      else scanGeom(geojson);
+      const looksProjected = (Math.abs(minX) > 180 || Math.abs(maxX) > 180 || Math.abs(minY) > 90 || Math.abs(maxY) > 90);
+      return { bbox: [[minY,minX],[maxY,maxX]], count, looksProjected };
+    }
+
+    function addDataset(name, geojson) {
+      const idx = datasets.length;
+      const color = colorForIndex(idx);
+      const style = { color, weight: 2, fillColor: color, fillOpacity: 0.5 };
+
+      const layer = L.geoJSON(geojson, {
+        style,
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng, style),
+        renderer: L.canvas({ padding: 0.5 })
+      }).addTo(map);
+
+      // UI item
+      const item = document.createElement('div');
+      item.className = 'item';
+      item.innerHTML = `
+        <div class="swatch" style="background:${color}"></div>
+        <div class="name" title="${name}">${name}</div>
+        <label><input type="checkbox" class="toggle" checked> visible</label>
+        <button class="btn remove">remove</button>
+      `;
+      listEl.appendChild(item);
+
+      // Toggle visibility
+      item.querySelector('.toggle').addEventListener('change', (e) => {
+        if (e.target.checked) layer.addTo(map); else map.removeLayer(layer);
+      });
+      // Remove
+      item.querySelector('.remove').addEventListener('click', () => {
+        map.removeLayer(layer);
+        listEl.removeChild(item);
+        // mark removed
+        ds.removed = true;
+      });
+
+      const ds = { name, color, layer, item, removed: false };
+      datasets.push(ds);
+
+      // Fit map to this layer's bounds (progressive zoom as you add)
+      try { map.fitBounds(layer.getBounds(), { padding:[12,12] }); } catch(e) {}
+
+      return ds;
+    }
+
+    
+    // Add hardcoded locations layer on load
+    try {
+      addDataset('Lokasjoner', lokasjonerGeojson);
+      setStatus('Loaded <b>Lokasjoner</b> (hardcoded) — points: ' + (lokasjonerGeojson.features?.length || 0));
+    } catch (e) {
+      console.error(e);
+      setStatus('❌ Failed loading hardcoded Lokasjoner: ' + e.message);
+    }
+
+function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onerror = () => reject(new Error('Read error'));
+        r.onload = () => resolve(r.result);
+        r.readAsText(file);
+      });
+    }
+
+    filesInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+
+      setStatus(`Reading ${files.length} file(s)…`);
+
+      for (const f of files) {
+        try {
+          const text = await readFileAsText(f);
+          const geojson = JSON.parse(text);
+
+          const info = bboxAndCrsGuess(geojson);
+          if (info.looksProjected) {
+            setStatus(`⚠️ <b>${f.name}</b> looks projected (meters). Reproject to WGS84 (EPSG:4326) for proper placement:
+              <code>ogr2ogr -t_srs EPSG:4326 out.geojson ${f.name}</code>`);
+          } else {
+            setStatus(`Loaded <b>${f.name}</b> — vertices: ${info.count.toLocaleString()}`);
+          }
+
+          addDataset(f.name, geojson);
+        } catch (err) {
+          console.error(err);
+          setStatus(`❌ Failed loading <b>${f.name}</b>: ${err.message}`);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
